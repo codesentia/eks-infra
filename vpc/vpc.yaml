@@ -1,0 +1,691 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  EKS platform VPC — three-tier subnet layout (public / private / intra) with
+  NAT Gateways per AZ, VPC endpoints, and cluster security groups.
+  Supports 2-AZ (dev) and 3-AZ (prod) topologies via the AZCount parameter.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Description: Environment name (dev or prod). Used in resource names and tags.
+    AllowedValues: [dev, prod]
+
+  VpcCidr:
+    Type: String
+    Description: /16 CIDR block for the VPC (e.g. 10.10.0.0/16 for dev).
+    Default: 10.10.0.0/16
+
+  AZCount:
+    Type: String
+    Description: Number of Availability Zones (2 for dev, 3 for prod).
+    Default: "2"
+    AllowedValues: ["2", "3"]
+
+# ---------------------------------------------------------------------------
+# Mappings — per-environment CIDR layout (see ADR-002)
+# Keyed on Environment (dev/prod) — CFN mapping keys cannot contain '/'
+# ---------------------------------------------------------------------------
+Mappings:
+  SubnetCidrs:
+    dev:
+      PublicA:  "10.10.0.0/20"
+      PublicB:  "10.10.48.0/20"
+      PublicC:  "10.10.96.0/20"
+      PrivateA: "10.10.16.0/20"
+      PrivateB: "10.10.64.0/20"
+      PrivateC: "10.10.112.0/20"
+      IntraA:   "10.10.32.0/20"
+      IntraB:   "10.10.80.0/20"
+      IntraC:   "10.10.128.0/20"
+    prod:
+      PublicA:  "10.20.0.0/20"
+      PublicB:  "10.20.48.0/20"
+      PublicC:  "10.20.96.0/20"
+      PrivateA: "10.20.16.0/20"
+      PrivateB: "10.20.64.0/20"
+      PrivateC: "10.20.112.0/20"
+      IntraA:   "10.20.32.0/20"
+      IntraB:   "10.20.80.0/20"
+      IntraC:   "10.20.128.0/20"
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  IsThreeAZ: !Equals [!Ref AZCount, "3"]
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ── VPC ──────────────────────────────────────────────────────────────────
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}"
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ── Internet Gateway ─────────────────────────────────────────────────────
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ── Public Subnets ───────────────────────────────────────────────────────
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PublicA]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-public-a"
+        - Key: kubernetes.io/role/elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PublicB]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-public-b"
+        - Key: kubernetes.io/role/elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Condition: IsThreeAZ
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PublicC]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-public-c"
+        - Key: kubernetes.io/role/elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  # ── Private Subnets ──────────────────────────────────────────────────────
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PrivateA]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-a"
+        - Key: kubernetes.io/role/internal-elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PrivateB]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-b"
+        - Key: kubernetes.io/role/internal-elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Condition: IsThreeAZ
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, PrivateC]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-c"
+        - Key: kubernetes.io/role/internal-elb
+          Value: "1"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  # ── Intra Subnets (control plane ENIs — no internet route) ───────────────
+  IntraSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, IntraA]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-a"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  IntraSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, IntraB]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-b"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  IntraSubnetC:
+    Type: AWS::EC2::Subnet
+    Condition: IsThreeAZ
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [SubnetCidrs, !Ref Environment, IntraC]
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-c"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: shared
+
+  # ── Public Route Table ───────────────────────────────────────────────────
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-public"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsThreeAZ
+    Properties:
+      SubnetId: !Ref PublicSubnetC
+      RouteTableId: !Ref PublicRouteTable
+
+  # ── NAT Gateways (one per AZ) ────────────────────────────────────────────
+  EipA:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-a"
+
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EipA.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-a"
+
+  EipB:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-b"
+
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EipB.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-b"
+
+  EipC:
+    Type: AWS::EC2::EIP
+    Condition: IsThreeAZ
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-c"
+
+  NatGatewayC:
+    Type: AWS::EC2::NatGateway
+    Condition: IsThreeAZ
+    Properties:
+      AllocationId: !GetAtt EipC.AllocationId
+      SubnetId: !Ref PublicSubnetC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-nat-c"
+
+  # ── Private Route Tables (one per AZ → local NAT GW) ────────────────────
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-a"
+
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGatewayA
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-b"
+
+  PrivateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGatewayB
+
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  PrivateRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Condition: IsThreeAZ
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-private-c"
+
+  PrivateRouteC:
+    Type: AWS::EC2::Route
+    Condition: IsThreeAZ
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NatGatewayC
+
+  PrivateSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsThreeAZ
+    Properties:
+      SubnetId: !Ref PrivateSubnetC
+      RouteTableId: !Ref PrivateRouteTableC
+
+  # ── Intra Route Tables (local only — no internet route) ──────────────────
+  IntraRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-a"
+
+  IntraSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref IntraSubnetA
+      RouteTableId: !Ref IntraRouteTableA
+
+  IntraRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-b"
+
+  IntraSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref IntraSubnetB
+      RouteTableId: !Ref IntraRouteTableB
+
+  IntraRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Condition: IsThreeAZ
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-intra-c"
+
+  IntraSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsThreeAZ
+    Properties:
+      SubnetId: !Ref IntraSubnetC
+      RouteTableId: !Ref IntraRouteTableC
+
+  # ── Security Groups ───────────────────────────────────────────────────────
+
+  # Node security group — attached to all worker nodes
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EKS worker nodes
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-node-sg"
+        - Key: !Sub "kubernetes.io/cluster/eks-${Environment}"
+          Value: owned
+
+  # Self-referencing intra-node rule (added separately to avoid circular ref)
+  NodeSGIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Allow all traffic between nodes in the same security group
+
+  # Inbound kubelet from control plane (added after ControlPlaneAdditionalSG exists)
+  NodeSGIngressKubelet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+      SourceSecurityGroupId: !Ref ControlPlaneAdditionalSecurityGroup
+      Description: Allow kubelet access from control plane additional SG
+
+  NodeSGEgressAll:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref NodeSecurityGroup
+      IpProtocol: "-1"
+      CidrIp: "0.0.0.0/0"
+      Description: Allow all outbound traffic
+
+  # Control plane additional security group — referenced by eksctl ClusterConfig
+  ControlPlaneAdditionalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Additional security group for EKS control plane (webhooks and kubelet access)
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-controlplane-sg"
+
+  ControlPlaneSGIngressWebhook:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ControlPlaneAdditionalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Allow webhook traffic from nodes to control plane
+
+  ControlPlaneSGIngressKubelet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref ControlPlaneAdditionalSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Allow kubelet port from nodes
+
+  # VPC endpoint security group — used by all interface endpoints
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC interface endpoints
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "eks-${Environment}-vpce-sg"
+
+  VpcEndpointSGIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref VpcEndpointSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      Description: Allow HTTPS from worker nodes to VPC endpoints
+
+  # ── VPC Endpoints ─────────────────────────────────────────────────────────
+
+  # S3 Gateway endpoint — free, attached to route tables (no subnet placement)
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTableA
+        - !Ref PrivateRouteTableB
+        - !If [IsThreeAZ, !Ref PrivateRouteTableC, !Ref AWS::NoValue]
+        - !Ref IntraRouteTableA
+        - !Ref IntraRouteTableB
+        - !If [IsThreeAZ, !Ref IntraRouteTableC, !Ref AWS::NoValue]
+
+  # Interface endpoints — placed in intra subnets (no internet route)
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref IntraSubnetA
+        - !Ref IntraSubnetB
+        - !If [IsThreeAZ, !Ref IntraSubnetC, !Ref AWS::NoValue]
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref IntraSubnetA
+        - !Ref IntraSubnetB
+        - !If [IsThreeAZ, !Ref IntraSubnetC, !Ref AWS::NoValue]
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref IntraSubnetA
+        - !Ref IntraSubnetB
+        - !If [IsThreeAZ, !Ref IntraSubnetC, !Ref AWS::NoValue]
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  SsmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref IntraSubnetA
+        - !Ref IntraSubnetB
+        - !If [IsThreeAZ, !Ref IntraSubnetC, !Ref AWS::NoValue]
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+  SsmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref IntraSubnetA
+        - !Ref IntraSubnetB
+        - !If [IsThreeAZ, !Ref IntraSubnetC, !Ref AWS::NoValue]
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+
+# ---------------------------------------------------------------------------
+# Outputs — exported with predictable names for cross-stack references
+# Pattern: !Sub "${AWS::StackName}-<ResourceType>-<Qualifier>"
+# ---------------------------------------------------------------------------
+Outputs:
+
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+
+  PublicSubnetA:
+    Description: Public subnet — AZ A
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnetA"
+
+  PublicSubnetB:
+    Description: Public subnet — AZ B
+    Value: !Ref PublicSubnetB
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnetB"
+
+  PublicSubnetC:
+    Condition: IsThreeAZ
+    Description: Public subnet — AZ C (prod only)
+    Value: !Ref PublicSubnetC
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnetC"
+
+  PrivateSubnetA:
+    Description: Private subnet — AZ A
+    Value: !Ref PrivateSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnetA"
+
+  PrivateSubnetB:
+    Description: Private subnet — AZ B
+    Value: !Ref PrivateSubnetB
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnetB"
+
+  PrivateSubnetC:
+    Condition: IsThreeAZ
+    Description: Private subnet — AZ C (prod only)
+    Value: !Ref PrivateSubnetC
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnetC"
+
+  IntraSubnetA:
+    Description: Intra subnet — AZ A (control plane ENIs)
+    Value: !Ref IntraSubnetA
+    Export:
+      Name: !Sub "${AWS::StackName}-IntraSubnetA"
+
+  IntraSubnetB:
+    Description: Intra subnet — AZ B (control plane ENIs)
+    Value: !Ref IntraSubnetB
+    Export:
+      Name: !Sub "${AWS::StackName}-IntraSubnetB"
+
+  IntraSubnetC:
+    Condition: IsThreeAZ
+    Description: Intra subnet — AZ C (prod only, control plane ENIs)
+    Value: !Ref IntraSubnetC
+    Export:
+      Name: !Sub "${AWS::StackName}-IntraSubnetC"
+
+  NodeSecurityGroupId:
+    Description: Security group ID for EKS worker nodes
+    Value: !Ref NodeSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-NodeSecurityGroupId"
+
+  ControlPlaneSecurityGroupId:
+    Description: Additional security group ID for EKS control plane
+    Value: !Ref ControlPlaneAdditionalSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-ControlPlaneSecurityGroupId"

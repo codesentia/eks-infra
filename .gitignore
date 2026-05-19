@@ -1,0 +1,16 @@
+# Python virtual environment
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# pip-tools compiled output is checked in; ignore the local cache
+.pip-tools-cache/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,41 @@
+schema: spec-driven
+
+context: |
+  Domain: Shared EKS platform enabling multi-team onboarding and containerized application deployment on AWS.
+
+  Tech stack:
+  - IaC: AWS CloudFormation (supporting AWS resources) and eksctl YAML manifests (cluster lifecycle)
+  - Scripting: Python 3.10+ and Bash (set -euo pipefail)
+  - Orchestration: Amazon EKS with managed node groups or Fargate
+  - AWS services: VPC, IAM, ECR, ALB/NLB (AWS Load Balancer Controller), Route 53, ACM, Secrets Manager, Parameter Store, CloudWatch, EBS/EFS CSI drivers
+
+  Repository structure:
+  - clusters/       eksctl ClusterConfig YAMLs per environment (dev, prod)
+  - addons/         Helm values / Kustomize overlays for shared cluster add-ons
+  - namespaces/     Per-team namespace manifests (quota, RBAC, network policy)
+  - iam/            CFN templates for IAM roles (node role, IRSA roles)
+  - vpc/            CFN templates for VPC, subnets, security groups
+  - scripts/        Python and Bash automation (onboarding, validation, helpers)
+  - docs/           Runbooks and onboarding guides
+
+  Key conventions:
+  - eksctl cluster configs: clusters/<env>.yaml
+  - CFN stacks deployed with change sets — never --no-execute-changeset in production
+  - IRSA roles named: eks-<cluster>-<component>-role
+  - Secrets never in repo files; use Secrets Manager or Parameter Store references
+  - GitOps-ready: manifests structured for Flux or ArgoCD ownership
+
+  Architecture principles:
+  - Multi-team: each team gets a dedicated namespace with RBAC, resource quotas, and network policies
+  - Shared services: ingress controller, cluster autoscaler, external-dns, cert-manager, observability installed once
+  - Least-privilege by default: node IAM roles, IRSA pod roles, and CI service accounts scoped minimally
+
+rules:
+  proposal:
+    - Always include a "Non-goals" section
+    - Call out IAM permission boundaries and IRSA trust policy requirements explicitly
+    - Flag any change that touches shared cluster add-ons as high blast radius
+  tasks:
+    - Break tasks into chunks deployable independently (one CFN stack or one eksctl operation per task)
+    - Tag tasks that require a change set review before execution with "[change-set required]"
+    - Tag tasks that modify shared add-ons with "[shared service — coordinate with teams]"

@@ -1,0 +1,5 @@
+[
+  { "ParameterKey": "GitHubOrg",   "ParameterValue": "codesentia" },
+  { "ParameterKey": "GitHubRepo",  "ParameterValue": "eks-infra" },
+  { "ParameterKey": "Environment", "ParameterValue": "dev" }
+]

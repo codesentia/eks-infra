@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  GitHub Actions IAM role with OIDC trust policy for CI/CD workflows.
+  Grants least-privilege permissions to create CloudFormation change sets only —
+  never to execute them. Deploy this stack once before the first CI run.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: GitHub organisation or user name (e.g. my-org)
+
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name without the org prefix (e.g. eks-infra)
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment — used to scope the trust condition and name resources
+
+Resources:
+
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "github-actions-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              StringLike:
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: cfn-changeset-only
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CloudFormationChangeSetCreate
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ListChangeSets
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"
+              - Sid: EC2ReadOnly
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                Resource: "*"
+              - Sid: S3TemplateUpload
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::cf-templates-*-${AWS::Region}/*"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  RoleArn:
+    Description: ARN of the GitHub Actions IAM role — set as ROLE_ARN GitHub Actions variable
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+
+  RoleName:
+    Description: Name of the GitHub Actions IAM role
+    Value: !Ref GitHubActionsRole

@@ -31,8 +31,15 @@ $(VENV)/bin/pip-compile: requirements.txt
 lint-vpc: bootstrap  ## Lint vpc/vpc.yaml with cfn-lint
 	$(CFN_LINT) vpc/vpc.yaml
 
+.PHONY: lint-all
+lint-all: bootstrap  ## Lint all CFN templates under vpc/ and iam/ (bootstrap/ excluded)
+	find $(wildcard vpc/ iam/) -name "*.yaml" -print0 | xargs -0 $(CFN_LINT)
+
 .PHONY: lint
 lint: lint-vpc  ## Run all linting checks
+
+.PHONY: ci
+ci: bootstrap lint-all  ## Full CI sequence: bootstrap then lint all templates
 
 # ── VPC Deployment ───────────────────────────────────────────────────────────
 

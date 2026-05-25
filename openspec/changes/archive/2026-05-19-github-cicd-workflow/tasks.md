@@ -17,13 +17,13 @@
 
 - [x] 3.1 Create `.github/workflows/` directory
 - [x] 3.2 Author `.github/workflows/ci.yaml`: triggers on `pull_request` and `push` to `main`; steps: checkout, setup-python, restore venv cache (key: `venv-${{ runner.os }}-${{ hashFiles('requirements.txt') }}`), `make ci`, save cache
-- [ ] 3.3 Push to a feature branch and verify the CI workflow runs and passes in GitHub Actions — manual verification after push
+- [x] 3.3 Push to a feature branch and verify the CI workflow runs and passes in GitHub Actions — manual verification after push
 
 ## 4. Deploy Workflow
 
 - [x] 4.1 Author `.github/workflows/deploy-vpc-dev.yaml`: triggers on `workflow_dispatch` and `push` to `main` with `paths: ['vpc/**']`; steps: checkout, configure-aws-credentials (OIDC, role ARN from output), `make deploy-vpc-dev`
-- [ ] 4.2 Add `AWS_REGION` and `ROLE_ARN` as GitHub Actions variables (not secrets — they are not sensitive) — manual operator step in GitHub Settings
-- [ ] 4.3 Push a trivial change to `vpc/` on a branch, merge to `main`, verify deploy workflow triggers and creates the change set in AWS — manual verification after push
+- [x] 4.2 Add `AWS_REGION` and `ROLE_ARN` as GitHub Actions variables (not secrets — they are not sensitive) — manual operator step in GitHub Settings
+- [x] 4.3 Push a trivial change to `vpc/` on a branch, merge to `main`, verify deploy workflow triggers and creates the change set in AWS — manual verification after push
 
 ## 5. Documentation
 

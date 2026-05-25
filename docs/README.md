@@ -25,7 +25,9 @@
 
 | Runbook | Description |
 |---------|-------------|
-| `runbooks/cluster-bootstrap.md` | Ordered sequence to bring a new cluster from zero to GitOps-managed state _(to be authored during implementation)_ |
+| [bootstrap/README.md](../bootstrap/README.md) | One-time setup: register GitHub OIDC provider, deploy `github-actions-dev` IAM role, set GitHub Actions variables |
+| [runbooks/github-actions-add-stack.md](runbooks/github-actions-add-stack.md) | How to add a deploy workflow for a new CloudFormation stack |
+| [runbooks/cluster-bootstrap.md](runbooks/cluster-bootstrap.md) | Ordered sequence to bring the `thor` cluster from zero to running — prerequisites, create, OIDC, verify |
 | `runbooks/team-onboarding.md` | End-to-end team onboarding procedure _(to be authored during implementation)_ |
 | `runbooks/cloudflare-token-rotation.md` | Rotating the Cloudflare API token without downtime _(to be authored during implementation)_ |
 | `runbooks/addon-upgrade.md` | Upgrading a shared cluster add-on through the ArgoCD gate _(to be authored during implementation)_ |

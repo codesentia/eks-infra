@@ -61,6 +61,10 @@ Resources:
                   - s3:PutObject
                   - s3:GetObject
                 Resource: !Sub "arn:aws:s3:::cf-templates-*-${AWS::Region}/*"
+              - Sid: IAMPassNodeRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/eks-*-node-role"
       Tags:
         - Key: Environment
           Value: !Ref Environment

@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  EKS managed node IAM role with least-privilege AWS managed policies.
+  Deploy this stack before creating the EKS cluster — the role ARN is
+  referenced by the eksctl ClusterConfig.
+
+Parameters:
+  ClusterName:
+    Type: String
+    Description: EKS cluster name (e.g. dev, prod). Role will be named eks-<ClusterName>-node-role.
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment — used for tagging.
+
+Resources:
+
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "eks-${ClusterName}-node-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  NodeRoleArn:
+    Description: ARN of the EKS node IAM role — reference this in the eksctl ClusterConfig
+    Value: !GetAtt NodeRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-NodeRoleArn"
+
+  NodeRoleName:
+    Description: Name of the EKS node IAM role
+    Value: !Ref NodeRole
+    Export:
+      Name: !Sub "${AWS::StackName}-NodeRoleName"

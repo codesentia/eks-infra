@@ -1,0 +1,4 @@
+[
+  { "ParameterKey": "ClusterName",  "ParameterValue": "thor" },
+  { "ParameterKey": "Environment",  "ParameterValue": "dev" }
+]

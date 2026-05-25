@@ -13,26 +13,41 @@ This model ensures every AWS API call can be attributed to a specific Kubernetes
 
 ## Node IAM Role
 
-**Role name pattern:** `eks-<cluster-name>-node-role`  
-**Attached to:** All managed node group instances (both `system` and `application` node groups)
+**CFN stack:** `iam-node-role-dev` (template: `iam/node-role.yaml`)  
+**Role name:** `eks-thor-node-role`  
+**ARN export:** `iam-node-role-dev-NodeRoleArn`  
+**Attached to:** All managed node group instances (both `system` and `application` node groups)  
+**Trust policy:** `ec2.amazonaws.com` only — no other service can assume this role
 
-### Permissions
+### Attached AWS managed policies
 
-| Policy / Action set | Why required |
-|---------------------|-------------|
+| Policy | Why required |
+|--------|-------------|
 | `AmazonEKSWorkerNodePolicy` | Allows the node to describe the cluster and register with the EKS control plane |
 | `AmazonEC2ContainerRegistryReadOnly` | Allows the node (kubelet) to pull container images from ECR |
-| `AmazonEKS_CNI_Policy` | Allows the VPC CNI plugin (`aws-node` DaemonSet) to manage pod networking ENIs — assign, unassign, and describe ENIs on the instance |
-| `cloudwatch:PutMetricData` | CloudWatch agent DaemonSet reports node-level metrics |
-| `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents`, `logs:DescribeLogStreams` | Fluent Bit DaemonSet ships container logs to CloudWatch |
+| `AmazonEKS_CNI_Policy` | Allows the VPC CNI plugin (`aws-node` DaemonSet) to manage pod networking ENIs — assign, unassign, and describe ENIs on the instance. Will be migrated to a VPC CNI IRSA role once the cluster OIDC provider is available. |
+| `AmazonSSMManagedInstanceCore` | Enables SSM Session Manager access to nodes — no SSH ports required |
 
 ### Explicitly excluded
 
 The node role does **not** grant:
+- `AmazonEBSCSIDriverPolicy` — EBS CSI access is granted via a dedicated IRSA role; attaching it here would give all pods implicit EBS access via the node identity
+- `cloudwatch:PutMetricData` / `logs:*` — CloudWatch agent and Fluent Bit use IRSA roles, not node-level permissions
 - `s3:*` — no bucket access at the node level
 - `secretsmanager:*` — secrets are accessed via IRSA only
-- `route53:*` — DNS management is handled by external-dns via IRSA (Cloudflare)
 - Any cross-account or cross-service permissions
+
+### Consuming the role ARN
+
+The eksctl ClusterConfig references the node role ARN via the CFN export:
+
+```yaml
+# clusters/thor.yaml (excerpt)
+managedNodeGroups:
+  - name: system
+    iam:
+      instanceRoleARN: !ImportValue iam-node-role-dev-NodeRoleArn
+```
 
 ---
 

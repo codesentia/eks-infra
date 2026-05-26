@@ -208,17 +208,23 @@ make destroy-cluster-thor
 ```
 Removes the `thor` EKS cluster and all eksctl-managed stacks (control plane, node groups). Preserves VPC and IAM resources.
 
-**2. Delete the node IAM role:**
+**2. Delete the VPC CNI IRSA role:**
+```bash
+make destroy-vpc-cni-role-dev
+```
+Removes the `iam-vpc-cni-role-dev` CloudFormation stack. Only run this after the cluster is deleted.
+
+**3. Delete the node IAM role:**
 ```bash
 make destroy-node-role-dev
 ```
-Removes the `iam-node-role-dev` CloudFormation stack. Only run this after the cluster is deleted.
+Removes the `iam-node-role-dev` CloudFormation stack. Only run this after the cluster and VPC CNI role are deleted.
 
-**3. Delete the VPC:**
+**4. Delete the VPC:**
 ```bash
 make destroy-vpc-dev
 ```
-Removes the `vpc-dev` CloudFormation stack. Only run this after the cluster and node role are deleted.
+Removes the `vpc-dev` CloudFormation stack. Only run this after all other resources are deleted.
 
 ### Full Teardown
 
@@ -228,7 +234,7 @@ To destroy all dev infrastructure in one command:
 make destroy-all-dev
 ```
 
-This orchestrates the three-stage teardown: cluster → node role → VPC. Each stage prompts for confirmation separately. You can abort at any stage by typing anything other than `yes`.
+This orchestrates the four-stage teardown: cluster → VPC CNI role → node role → VPC. Each stage prompts for confirmation separately. You can abort at any stage by typing anything other than `yes`.
 
 **Non-interactive mode** (for CI or scripts):
 ```bash

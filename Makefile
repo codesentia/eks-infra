@@ -187,6 +187,21 @@ destroy-cluster-thor:  ## [DESTRUCTIVE] Delete the thor EKS cluster and all node
 	fi
 	$(EKSCTL) delete cluster --name thor --region us-east-1 --wait
 
+.PHONY: destroy-vpc-cni-role-dev
+destroy-vpc-cni-role-dev:  ## [DESTRUCTIVE] Delete the iam-vpc-cni-role-dev CloudFormation stack
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "WARNING: This will permanently delete the iam-vpc-cni-role-dev IAM role."; \
+		read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+		if [ "$$confirm" != "yes" ]; then \
+			echo "ERROR: Destroy operation cancelled"; \
+			exit 1; \
+		fi \
+	fi
+	$(AWS) cloudformation delete-stack --stack-name iam-vpc-cni-role-dev
+	@echo "Waiting for stack deletion to complete..."
+	$(AWS) cloudformation wait stack-delete-complete --stack-name iam-vpc-cni-role-dev
+	@echo "iam-vpc-cni-role-dev stack deleted successfully"
+
 .PHONY: destroy-node-role-dev
 destroy-node-role-dev:  ## [DESTRUCTIVE] Delete the iam-node-role-dev CloudFormation stack
 	@if [ "$(CONFIRM)" != "yes" ]; then \
@@ -218,11 +233,13 @@ destroy-vpc-dev:  ## [DESTRUCTIVE] Delete the vpc-dev CloudFormation stack
 	@echo "vpc-dev stack deleted successfully"
 
 .PHONY: destroy-all-dev
-destroy-all-dev:  ## [DESTRUCTIVE] Destroy all dev infrastructure: cluster → node role → VPC (with confirmation at each stage)
-	@echo "This will destroy the thor cluster, iam-node-role-dev, and vpc-dev in sequence."
+destroy-all-dev:  ## [DESTRUCTIVE] Destroy all dev infrastructure: cluster → VPC CNI role → node role → VPC (with confirmation at each stage)
+	@echo "This will destroy the thor cluster, iam-vpc-cni-role-dev, iam-node-role-dev, and vpc-dev in sequence."
 	@echo "Each stage will prompt for confirmation."
 	@echo ""
 	$(MAKE) destroy-cluster-thor
+	@echo ""
+	$(MAKE) destroy-vpc-cni-role-dev
 	@echo ""
 	$(MAKE) destroy-node-role-dev
 	@echo ""

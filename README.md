@@ -85,6 +85,7 @@ To tear down dev infrastructure (cluster, IAM roles, VPC):
 
 ```bash
 make destroy-cluster-thor      # delete thor cluster only (~10 min)
+make destroy-vpc-cni-role-dev  # delete VPC CNI IRSA role stack
 make destroy-node-role-dev     # delete node IAM role stack
 make destroy-vpc-dev           # delete VPC stack
 ```
@@ -94,10 +95,10 @@ Each target requires confirmation (type `yes` when prompted).
 ### Full Teardown
 
 ```bash
-make destroy-all-dev           # destroy all: cluster → node role → VPC
+make destroy-all-dev           # destroy all: cluster → VPC CNI role → node role → VPC
 ```
 
-This orchestrates the three-stage teardown with separate confirmation prompts. For non-interactive use:
+This orchestrates the four-stage teardown with separate confirmation prompts. For non-interactive use:
 
 ```bash
 CONFIRM=yes make destroy-all-dev

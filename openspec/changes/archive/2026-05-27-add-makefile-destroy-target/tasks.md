@@ -14,11 +14,11 @@
 
 > Prerequisites: `vpc-dev`, `iam-node-role-dev`, and `thor` cluster deployed in a test AWS account
 
-- [ ] 3.1 Test `make destroy-cluster-thor` interactively: type `no` at prompt — confirm target exits with error; run again, type `yes` — confirm cluster deletes successfully (~10 min), eksctl-managed stacks removed
-- [ ] 3.2 Redeploy cluster; test `CONFIRM=yes make destroy-cluster-thor` non-interactively — confirm cluster deletes without prompt
-- [ ] 3.3 Redeploy cluster; test `make destroy-all-dev` — confirm three separate prompts appear (cluster, node role, VPC), type `yes` for cluster and node role, type `no` for VPC — confirm VPC is not deleted; verify node role is deleted but VPC remains
-- [ ] 3.4 Redeploy node role and re-run `make destroy-all-dev` with `yes` to all prompts — confirm full teardown completes successfully in order, all CloudFormation stacks removed
-- [ ] 3.5 Verify `/eks/thor/oidc-issuer-url` Parameter Store entry still exists after cluster deletion (not auto-deleted)
+- [x] 3.1 Test `make destroy-cluster-thor` interactively: type `no` at prompt — confirm target exits with error; run again, type `yes` — confirm cluster deletes successfully (~10 min), eksctl-managed stacks removed
+- [x] 3.2 Redeploy cluster; test `CONFIRM=yes make destroy-cluster-thor` non-interactively — confirm cluster deletes without prompt
+- [x] 3.3 Redeploy cluster; test `make destroy-all-dev` — confirm three separate prompts appear (cluster, node role, VPC), type `yes` for cluster and node role, type `no` for VPC — confirm VPC is not deleted; verify node role is deleted but VPC remains
+- [x] 3.4 Redeploy node role and re-run `make destroy-all-dev` with `yes` to all prompts — confirm full teardown completes successfully in order, all CloudFormation stacks removed
+- [x] 3.5 Verify `/eks/thor/oidc-issuer-url` Parameter Store entry still exists after cluster deletion (not auto-deleted)
 
 ## 4. Final Review
 

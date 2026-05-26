@@ -15,8 +15,8 @@
 > Prerequisites: `vpc-dev` stack deployed, `iam-node-role-dev` stack deployed.
 
 - [x] 3.1 Run `make dry-run-cluster-thor` — confirm eksctl reports zero validation errors with resolved values
-- [ ] 3.2 Run `make create-cluster-thor` — create the `thor` cluster (~15 minutes); verify all nodes are Ready with `kubectl get nodes`
-- [ ] 3.3 Run `make post-create-thor` — associate OIDC provider; verify issuer URL stored at `/eks/thor/oidc-issuer-url` in Parameter Store
+- [x] 3.2 Run `make create-cluster-thor` — create the `thor` cluster (~15 minutes); verify all nodes are Ready with `kubectl get nodes`
+- [x] 3.3 Run `make post-create-thor` — associate OIDC provider; verify issuer URL stored at `/eks/thor/oidc-issuer-url` in Parameter Store
 
 ## 4. Documentation
 

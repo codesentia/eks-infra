@@ -26,25 +26,25 @@
 
 > Prerequisites: `thor` cluster exists but has CNI error; `vpc-dev` and `iam-node-role-dev` deployed
 
-- [ ] 6.1 Verify cluster OIDC provider: run `eksctl utils associate-iam-oidc-provider --cluster thor --region us-east-1 --approve` (idempotent)
-- [ ] 6.2 Fetch and store OIDC issuer URL: run updated `post-create-thor` target (OIDC association already done, focuses on Parameter Store write)
-- [ ] 6.3 Deploy VPC CNI IRSA role: run `make deploy-vpc-cni-role-dev`, execute change set in CloudFormation console
-- [ ] 6.4 Install VPC CNI add-on: run `make install-vpc-cni-addon-thor`
-- [ ] 6.5 Verify `aws-node` DaemonSet is running: `kubectl get daemonset -n kube-system aws-node` — all pods should be Ready within 2-3 minutes
-- [ ] 6.6 Verify nodes report NetworkReady: `kubectl get nodes` — all nodes should be `Ready` status
-- [ ] 6.7 Test pod scheduling: create a test pod (`kubectl run test-nginx --image=nginx`), verify it reaches `Running` state
+- [x] 6.1 Verify cluster OIDC provider: run `eksctl utils associate-iam-oidc-provider --cluster thor --region us-east-1 --approve` (idempotent)
+- [x] 6.2 Fetch and store OIDC issuer URL: run updated `post-create-thor` target (OIDC association already done, focuses on Parameter Store write)
+- [x] 6.3 Deploy VPC CNI IRSA role: run `make deploy-vpc-cni-role-dev`, execute change set in CloudFormation console
+- [x] 6.4 Install VPC CNI add-on: run `make install-vpc-cni-addon-thor`
+- [x] 6.5 Verify `aws-node` DaemonSet is running: `kubectl get daemonset -n kube-system aws-node` — all pods should be Ready within 2-3 minutes
+- [x] 6.6 Verify nodes report NetworkReady: `kubectl get nodes` — all nodes should be `Ready` status
+- [x] 6.7 Test pod scheduling: create a test pod (`kubectl run test-nginx --image=nginx`), verify it reaches `Running` state
 
 ## 7. Validation (New Cluster Creation)
 
 > Prerequisites: No cluster exists; `vpc-dev` and `iam-node-role-dev` deployed
 
-- [ ] 7.1 Run `make create-cluster-thor` with updated ClusterConfig (includes `iam.withOIDC: true`)
-- [ ] 7.2 Run `make post-create-thor` — verify OIDC issuer stored, VPC CNI role deployed, add-on installed
-- [ ] 7.3 Verify nodes are Ready and pods can schedule (same checks as 6.6 and 6.7)
+- [x] 7.1 Run `make create-cluster-thor` with updated ClusterConfig (includes `iam.withOIDC: true`)
+- [x] 7.2 Run `make post-create-thor` — verify OIDC issuer stored, VPC CNI role deployed, add-on installed
+- [x] 7.3 Verify nodes are Ready and pods can schedule (same checks as 6.6 and 6.7)
 
 ## 8. Node Role Cleanup (Optional)
 
 > Only after VPC CNI add-on is confirmed working with IRSA
 
-- [ ] 8.1 Update `iam-node-role-dev` stack: run `aws cloudformation deploy` with updated `iam/node-role.yaml` (no `AmazonEKS_CNI_Policy`)
-- [ ] 8.2 Verify VPC CNI still functions after node role policy removal: check `aws-node` pods remain Running, test new pod creation
+- [x] 8.1 Update `iam-node-role-dev` stack: run `aws cloudformation deploy` with updated `iam/node-role.yaml` (no `AmazonEKS_CNI_Policy`)
+- [x] 8.2 Verify VPC CNI still functions after node role policy removal: check `aws-node` pods remain Running, test new pod creation

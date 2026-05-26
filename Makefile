@@ -61,6 +61,25 @@ deploy-node-role-dev:  ## [change-set required] Create iam-node-role-dev change 
 		--parameter-overrides file://iam/parameters/node-role-dev.json \
 		--capabilities CAPABILITY_NAMED_IAM
 
+.PHONY: deploy-vpc-cni-role-dev
+deploy-vpc-cni-role-dev:  ## [change-set required] Create iam-vpc-cni-role-dev change set (review before executing)
+	@echo "Fetching OIDC issuer URL from Parameter Store..."
+	$(eval OIDC_ISSUER_URL := $(shell $(AWS) ssm get-parameter --name /eks/thor/oidc-issuer-url --query "Parameter.Value" --output text 2>/dev/null))
+	@test -n "$(OIDC_ISSUER_URL)" || (echo "ERROR: OIDC issuer URL not found at /eks/thor/oidc-issuer-url — run post-create-thor first" && exit 1)
+	$(eval OIDC_ISSUER_HOST := $(shell echo "$(OIDC_ISSUER_URL)" | sed 's|https://||'))
+	@echo "OIDC issuer host: $(OIDC_ISSUER_HOST)"
+	$(eval STACK_EXISTS := $(shell $(AWS) cloudformation describe-stacks --stack-name iam-vpc-cni-role-dev --query "Stacks[0].StackName" --output text 2>/dev/null || echo ""))
+	$(eval CHANGE_SET_TYPE := $(if $(STACK_EXISTS),UPDATE,CREATE))
+	@echo "Creating $(CHANGE_SET_TYPE) change set for iam-vpc-cni-role-dev..."
+	$(AWS) cloudformation create-change-set \
+		--stack-name iam-vpc-cni-role-dev \
+		--change-set-name iam-vpc-cni-role-dev-$$(date +%Y%m%d-%H%M%S) \
+		--template-body file://iam/vpc-cni-role.yaml \
+		--parameters ParameterKey=ClusterName,ParameterValue=thor ParameterKey=Environment,ParameterValue=dev ParameterKey=OIDCIssuerHost,ParameterValue=$(OIDC_ISSUER_HOST) \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--change-set-type $(CHANGE_SET_TYPE)
+	@echo "Change set created. Execute it in the CloudFormation Console."
+
 .PHONY: deploy-vpc-prod
 deploy-vpc-prod:  ## [change-set required] Create vpc-prod change set (review before executing)
 	$(AWS) cloudformation deploy \
@@ -119,8 +138,23 @@ dry-run-cluster-thor: resolve-cluster-thor  ## Validate thor ClusterConfig again
 create-cluster-thor: resolve-cluster-thor  ## Create the thor EKS cluster (~15 min)
 	$(EKSCTL) create cluster -f $(THOR_RESOLVED)
 
+.PHONY: install-vpc-cni-addon-thor
+install-vpc-cni-addon-thor:  ## Install VPC CNI add-on with IRSA role
+	@echo "Fetching VPC CNI role ARN from iam-vpc-cni-role-dev stack..."
+	$(eval VPC_CNI_ROLE_ARN := $(shell $(AWS) cloudformation describe-stacks --stack-name iam-vpc-cni-role-dev --query "Stacks[0].Outputs[?OutputKey=='VPCCNIRoleArn'].OutputValue" --output text 2>/dev/null))
+	@test -n "$(VPC_CNI_ROLE_ARN)" || (echo "ERROR: iam-vpc-cni-role-dev stack not found or VPCCNIRoleArn output missing — run deploy-vpc-cni-role-dev first" && exit 1)
+	@echo "Installing VPC CNI add-on with role: $(VPC_CNI_ROLE_ARN)"
+	$(EKSCTL) create addon \
+		--cluster thor \
+		--region us-east-1 \
+		--name vpc-cni \
+		--version v1.19.0-eksbuild.1 \
+		--service-account-role-arn $(VPC_CNI_ROLE_ARN) \
+		--force
+	@echo "VPC CNI add-on installation initiated. Check status with: kubectl get daemonset -n kube-system aws-node"
+
 .PHONY: post-create-thor
-post-create-thor:  ## Associate OIDC provider and store issuer URL in Parameter Store
+post-create-thor:  ## Associate OIDC provider, store issuer URL, deploy VPC CNI role, and install VPC CNI add-on
 	$(EKSCTL) utils associate-iam-oidc-provider --cluster thor --region us-east-1 --approve
 	$(eval OIDC_URL := $(shell $(AWS) eks describe-cluster --name thor --region us-east-1 --query "cluster.identity.oidc.issuer" --output text))
 	@test -n "$(OIDC_URL)" || (echo "ERROR: Could not retrieve OIDC issuer URL from cluster thor" && exit 1)
@@ -130,6 +164,71 @@ post-create-thor:  ## Associate OIDC provider and store issuer URL in Parameter 
 		--type String \
 		--overwrite
 	@echo "OIDC issuer URL stored at /eks/thor/oidc-issuer-url: $(OIDC_URL)"
+	@echo ""
+	@echo "Deploying VPC CNI IRSA role..."
+	$(MAKE) deploy-vpc-cni-role-dev
+	@echo ""
+	@echo "IMPORTANT: Execute the CloudFormation change set for iam-vpc-cni-role-dev in the AWS Console before continuing."
+	@read -p "Press Enter after executing the change set to continue with VPC CNI add-on installation..."
+	@echo ""
+	$(MAKE) install-vpc-cni-addon-thor
+
+# ── Destroy Infrastructure ──────────────────────────────────────────────────
+
+.PHONY: destroy-cluster-thor
+destroy-cluster-thor:  ## [DESTRUCTIVE] Delete the thor EKS cluster and all node groups
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "WARNING: This will permanently delete the thor EKS cluster and all node groups."; \
+		read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+		if [ "$$confirm" != "yes" ]; then \
+			echo "ERROR: Destroy operation cancelled"; \
+			exit 1; \
+		fi \
+	fi
+	$(EKSCTL) delete cluster --name thor --region us-east-1 --wait
+
+.PHONY: destroy-node-role-dev
+destroy-node-role-dev:  ## [DESTRUCTIVE] Delete the iam-node-role-dev CloudFormation stack
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "WARNING: This will permanently delete the iam-node-role-dev IAM role."; \
+		read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+		if [ "$$confirm" != "yes" ]; then \
+			echo "ERROR: Destroy operation cancelled"; \
+			exit 1; \
+		fi \
+	fi
+	$(AWS) cloudformation delete-stack --stack-name iam-node-role-dev
+	@echo "Waiting for stack deletion to complete..."
+	$(AWS) cloudformation wait stack-delete-complete --stack-name iam-node-role-dev
+	@echo "iam-node-role-dev stack deleted successfully"
+
+.PHONY: destroy-vpc-dev
+destroy-vpc-dev:  ## [DESTRUCTIVE] Delete the vpc-dev CloudFormation stack
+	@if [ "$(CONFIRM)" != "yes" ]; then \
+		echo "WARNING: This will permanently delete the vpc-dev VPC and all subnets."; \
+		read -p "Are you sure? Type 'yes' to confirm: " confirm; \
+		if [ "$$confirm" != "yes" ]; then \
+			echo "ERROR: Destroy operation cancelled"; \
+			exit 1; \
+		fi \
+	fi
+	$(AWS) cloudformation delete-stack --stack-name vpc-dev
+	@echo "Waiting for stack deletion to complete..."
+	$(AWS) cloudformation wait stack-delete-complete --stack-name vpc-dev
+	@echo "vpc-dev stack deleted successfully"
+
+.PHONY: destroy-all-dev
+destroy-all-dev:  ## [DESTRUCTIVE] Destroy all dev infrastructure: cluster → node role → VPC (with confirmation at each stage)
+	@echo "This will destroy the thor cluster, iam-node-role-dev, and vpc-dev in sequence."
+	@echo "Each stage will prompt for confirmation."
+	@echo ""
+	$(MAKE) destroy-cluster-thor
+	@echo ""
+	$(MAKE) destroy-node-role-dev
+	@echo ""
+	$(MAKE) destroy-vpc-dev
+	@echo ""
+	@echo "All dev infrastructure destroyed."
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 

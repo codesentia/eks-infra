@@ -31,25 +31,25 @@ Parameters:
 Mappings:
   SubnetCidrs:
     dev:
-      PublicA:  "10.10.0.0/20"
-      PublicB:  "10.10.48.0/20"
-      PublicC:  "10.10.96.0/20"
+      PublicA: "10.10.0.0/20"
+      PublicB: "10.10.48.0/20"
+      PublicC: "10.10.96.0/20"
       PrivateA: "10.10.16.0/20"
       PrivateB: "10.10.64.0/20"
       PrivateC: "10.10.112.0/20"
-      IntraA:   "10.10.32.0/20"
-      IntraB:   "10.10.80.0/20"
-      IntraC:   "10.10.128.0/20"
+      IntraA: "10.10.32.0/20"
+      IntraB: "10.10.80.0/20"
+      IntraC: "10.10.128.0/20"
     prod:
-      PublicA:  "10.20.0.0/20"
-      PublicB:  "10.20.48.0/20"
-      PublicC:  "10.20.96.0/20"
+      PublicA: "10.20.0.0/20"
+      PublicB: "10.20.48.0/20"
+      PublicC: "10.20.96.0/20"
       PrivateA: "10.20.16.0/20"
       PrivateB: "10.20.64.0/20"
       PrivateC: "10.20.112.0/20"
-      IntraA:   "10.20.32.0/20"
-      IntraB:   "10.20.80.0/20"
-      IntraC:   "10.20.128.0/20"
+      IntraA: "10.20.32.0/20"
+      IntraB: "10.20.80.0/20"
+      IntraC: "10.20.128.0/20"
 
 # ---------------------------------------------------------------------------
 # Conditions
@@ -61,7 +61,6 @@ Conditions:
 # Resources
 # ---------------------------------------------------------------------------
 Resources:
-
   # ── VPC ──────────────────────────────────────────────────────────────────
   VPC:
     Type: AWS::EC2::VPC
@@ -614,7 +613,6 @@ Resources:
 # Pattern: !Sub "${AWS::StackName}-<ResourceType>-<Qualifier>"
 # ---------------------------------------------------------------------------
 Outputs:
-
   VpcId:
     Description: VPC ID
     Value: !Ref VPC

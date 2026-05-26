@@ -9,6 +9,9 @@ metadata:
     Environment: dev
     ManagedBy: eksctl
 
+iam:
+  withOIDC: true
+
 vpc:
   id: "${VPC_ID}"
   subnets:
@@ -51,6 +54,9 @@ managedNodeGroups:
     subnets:
       - "${PRIVATE_SUBNET_A}"
       - "${PRIVATE_SUBNET_B}"
+    securityGroups:
+      attachIDs:
+        - "${NODE_SG_ID}"
     iam:
       instanceRoleARN: "${NODE_ROLE_ARN}"
     taints:
@@ -72,6 +78,9 @@ managedNodeGroups:
     subnets:
       - "${PRIVATE_SUBNET_A}"
       - "${PRIVATE_SUBNET_B}"
+    securityGroups:
+      attachIDs:
+        - "${NODE_SG_ID}"
     iam:
       instanceRoleARN: "${NODE_ROLE_ARN}"
     labels:

@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  IAM role for EKS VPC CNI add-on using IRSA (IAM Roles for Service Accounts).
+  The aws-node DaemonSet in kube-system namespace assumes this role to manage
+  ENIs and IP addresses on worker nodes. Requires cluster OIDC provider to exist.
+
+Parameters:
+  ClusterName:
+    Type: String
+    Description: EKS cluster name (e.g. thor). Role will be named eks-<ClusterName>-vpc-cni-role.
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment — used for tagging.
+
+  OIDCIssuerHost:
+    Type: String
+    Description: >
+      OIDC issuer URL for the EKS cluster WITHOUT the https:// prefix.
+      Example: oidc.eks.us-east-1.amazonaws.com/id/ABCD1234567890.
+      Retrieve via: aws eks describe-cluster --name <cluster> --query "cluster.identity.oidc.issuer" --output text
+      Then strip the https:// prefix.
+
+Resources:
+
+  VPCCNIRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "eks-${ClusterName}-vpc-cni-role"
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCIssuerHost}"
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "${OIDCIssuerHost}:sub": "system:serviceaccount:kube-system:aws-node",
+                      "${OIDCIssuerHost}:aud": "sts.amazonaws.com"
+                    }
+                  }
+                }
+              ]
+            }
+          - OIDCIssuerHost: !Ref OIDCIssuerHost
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Component
+          Value: vpc-cni
+
+Outputs:
+  VPCCNIRoleArn:
+    Description: ARN of the VPC CNI IRSA role — reference this when installing the vpc-cni add-on
+    Value: !GetAtt VPCCNIRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCCNIRoleArn"
+
+  VPCCNIRoleName:
+    Description: Name of the VPC CNI IRSA role
+    Value: !Ref VPCCNIRole
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCCNIRoleName"

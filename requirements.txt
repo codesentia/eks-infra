@@ -10,7 +10,7 @@ attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
-aws-sam-translator==1.109.0
+aws-sam-translator==1.110.0
     # via cfn-lint
 boto3==1.43.10
     # via

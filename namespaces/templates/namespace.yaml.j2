@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-{{ team_name }}
+  labels:
+    platform.io/team: {{ team_name }}
+    platform.io/contact: {{ contact_email }}
+    platform.io/repo: {{ repo_url }}

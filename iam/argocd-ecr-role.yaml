@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM role for ArgoCD to pull images from ECR using IRSA
+
+Parameters:
+  OIDCIssuerHost:
+    Type: String
+    Description: OIDC provider issuer host (without https:// prefix)
+
+  ClusterName:
+    Type: String
+    Description: EKS cluster name
+    Default: thor
+
+  Environment:
+    Type: String
+    Description: Environment name (dev, prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+Resources:
+  ArgoCDECRRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'eks-${ClusterName}-argocd-role'
+      Description: IRSA role for ArgoCD to pull images from ECR
+      AssumeRolePolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCIssuerHost}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringEquals": {
+                    "${OIDCIssuerHost}:sub": [
+                      "system:serviceaccount:argocd:argocd-application-controller",
+                      "system:serviceaccount:argocd:argocd-server"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+      ManagedPolicyArns:
+        - !Ref ArgoCDECRPolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Component
+          Value: argocd
+
+  ArgoCDECRPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'eks-${ClusterName}-argocd-ecr-policy'
+      Description: Policy granting ArgoCD permission to pull images from ECR
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ECRGetAuthorizationToken
+            Effect: Allow
+            Action:
+              - 'ecr:GetAuthorizationToken'
+            Resource: '*'
+          - Sid: ECRPullImages
+            Effect: Allow
+            Action:
+              - 'ecr:BatchCheckLayerAvailability'
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+            Resource: '*'
+
+Outputs:
+  ArgoCDRoleArn:
+    Description: ARN of the ArgoCD IRSA role
+    Value: !GetAtt ArgoCDECRRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ArgoCDRoleArn'
+
+  ArgoCDRoleName:
+    Description: Name of the ArgoCD IRSA role
+    Value: !Ref ArgoCDECRRole
+    Export:
+      Name: !Sub '${AWS::StackName}-ArgoCDRoleName'

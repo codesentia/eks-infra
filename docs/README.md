@@ -28,7 +28,7 @@
 | [bootstrap/README.md](../bootstrap/README.md) | One-time setup: register GitHub OIDC provider, deploy `github-actions-dev` IAM role, set GitHub Actions variables |
 | [runbooks/github-actions-add-stack.md](runbooks/github-actions-add-stack.md) | How to add a deploy workflow for a new CloudFormation stack |
 | [runbooks/cluster-bootstrap.md](runbooks/cluster-bootstrap.md) | Ordered sequence to bring the `thor` cluster from zero to running — prerequisites, create, OIDC, verify |
-| `runbooks/team-onboarding.md` | End-to-end team onboarding procedure _(to be authored during implementation)_ |
+| [runbooks/team-onboarding.md](runbooks/team-onboarding.md) | End-to-end team onboarding procedure: ArgoCD installation, namespace creation, GitOps workflow, troubleshooting |
 | `runbooks/cloudflare-token-rotation.md` | Rotating the Cloudflare API token without downtime _(to be authored during implementation)_ |
 | `runbooks/addon-upgrade.md` | Upgrading a shared cluster add-on through the ArgoCD gate _(to be authored during implementation)_ |
 | `runbooks/cluster-upgrade.md` | Kubernetes version upgrade procedure _(to be authored during implementation)_ |

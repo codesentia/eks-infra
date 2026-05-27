@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-{{ team_name }}-quota
+  namespace: team-{{ team_name }}
+spec:
+  hard:
+    requests.cpu: "{{ cpu_quota }}"
+    requests.memory: {{ memory_quota }}
+    limits.cpu: "{{ cpu_quota }}"
+    limits.memory: {{ memory_quota }}
+    count/pods: "50"

@@ -2,3 +2,4 @@
 cfn-lint
 boto3
 pyyaml
+jinja2

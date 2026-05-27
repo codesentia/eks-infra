@@ -77,6 +77,69 @@ make post-create-thor       # associate OIDC provider, deploy VPC CNI IRSA role,
 
 ---
 
+## Install ArgoCD (GitOps)
+
+> Requires `thor` cluster deployed with OIDC provider enabled.
+
+Install ArgoCD as the shared GitOps controller:
+
+```bash
+make install-argocd
+```
+
+This will:
+1. Deploy ArgoCD IRSA role for ECR image pulls (creates CloudFormation change set)
+2. Install ArgoCD via Helm to `argocd` namespace
+3. Wait for all ArgoCD pods to be Ready
+4. Print instructions for accessing the ArgoCD UI
+
+**Note**: You'll be prompted to execute the CloudFormation change set in the Console before Helm installation continues.
+
+**Access ArgoCD UI**:
+```bash
+# Get admin password
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d
+
+# Port-forward to UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+# Access at https://localhost:8080 (username: admin)
+```
+
+---
+
+## Onboard a Team
+
+> Requires ArgoCD installed.
+
+Onboard a new team with isolated namespace, RBAC, resource quotas, and GitOps:
+
+```bash
+make onboard-team \
+  TEAM_NAME=phoenix \
+  REPO_URL=https://github.com/myorg/phoenix-apps \
+  CPU_QUOTA=4 \
+  MEMORY_QUOTA=8Gi \
+  CONTACT_EMAIL=phoenix@example.com
+```
+
+This creates:
+- Namespace `team-phoenix` with labels
+- ResourceQuota (CPU/memory limits)
+- LimitRange (default container limits)
+- NetworkPolicy (namespace isolation)
+- ServiceAccount with admin RBAC
+- ArgoCD AppProject (restricts source repo and destination)
+
+**Validate onboarding**:
+```bash
+python scripts/validate_team_setup.py --team phoenix
+```
+
+**Team GitOps Workflow**: Teams deploy applications by committing manifests to their git repo under `apps/` directories. See [docs/runbooks/team-onboarding.md](docs/runbooks/team-onboarding.md) for complete workflow and troubleshooting.
+
+---
+
 ## Destroy Infrastructure
 
 To tear down dev infrastructure (cluster, IAM roles, VPC):
@@ -131,6 +194,9 @@ All change sets require manual execution in the AWS Console.
 ```
 bootstrap/      One-time IAM/OIDC setup (not managed by CI)
 clusters/       eksctl ClusterConfig templates
+addons/         Helm values for shared cluster add-ons (ArgoCD, etc.)
+namespaces/     Jinja2 templates for team namespace resources
+scripts/        Python automation (team onboarding, validation)
 docs/           Architecture docs, ADRs, runbooks
 iam/            CFN templates for IAM roles
 vpc/            CFN templates for VPC and subnets

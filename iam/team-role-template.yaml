@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  Optional IAM role for team workloads requiring AWS API access via IRSA.
+  This template is created on demand when a team requests AWS permissions during onboarding.
+  Use the --irsa-policies flag in the onboarding script to deploy this role.
+
+Parameters:
+  TeamName:
+    Type: String
+    Description: Team name (e.g., phoenix, data-eng)
+    AllowedPattern: '^[a-z0-9-]+$'
+    ConstraintDescription: Must be lowercase alphanumeric with hyphens
+
+  OIDCIssuerHost:
+    Type: String
+    Description: OIDC provider issuer host (without https:// prefix)
+
+  ClusterName:
+    Type: String
+    Description: EKS cluster name
+    Default: thor
+
+  Environment:
+    Type: String
+    Description: Environment name (dev, prod)
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+  PolicyArns:
+    Type: CommaDelimitedList
+    Description: Comma-separated list of IAM managed policy ARNs to attach to the role
+    Default: ''
+
+Conditions:
+  HasPolicyArns: !Not [!Equals [!Join ['', !Ref PolicyArns], '']]
+
+Resources:
+  TeamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'eks-${ClusterName}-team-${TeamName}-role'
+      Description: !Sub 'IRSA role for team ${TeamName} workloads'
+      AssumeRolePolicyDocument:
+        Fn::Sub: |
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/${OIDCIssuerHost}"
+                },
+                "Action": "sts:AssumeRoleWithWebIdentity",
+                "Condition": {
+                  "StringLike": {
+                    "${OIDCIssuerHost}:sub": "system:serviceaccount:team-${TeamName}:*"
+                  }
+                }
+              }
+            ]
+          }
+      ManagedPolicyArns: !If
+        - HasPolicyArns
+        - !Ref PolicyArns
+        - !Ref AWS::NoValue
+      Tags:
+        - Key: Team
+          Value: !Ref TeamName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Component
+          Value: team-workload
+
+Outputs:
+  TeamRoleArn:
+    Description: ARN of the team IRSA role
+    Value: !GetAtt TeamRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TeamRoleArn'
+
+  TeamRoleName:
+    Description: Name of the team IRSA role
+    Value: !Ref TeamRole
+    Export:
+      Name: !Sub '${AWS::StackName}-TeamRoleName'
+
+  ServiceAccountAnnotation:
+    Description: Annotation to add to team ServiceAccounts
+    Value: !Sub 'eks.amazonaws.com/role-arn: ${TeamRole.Arn}'

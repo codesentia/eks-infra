@@ -247,6 +247,96 @@ destroy-all-dev:  ## [DESTRUCTIVE] Destroy all dev infrastructure: cluster → V
 	@echo ""
 	@echo "All dev infrastructure destroyed."
 
+# ── Team Onboarding ──────────────────────────────────────────────────────────
+
+.PHONY: onboard-team
+onboard-team:  ## Onboard a new team (requires TEAM_NAME, REPO_URL, CPU_QUOTA, MEMORY_QUOTA, CONTACT_EMAIL)
+	@test -n "$(TEAM_NAME)" || (echo "ERROR: TEAM_NAME is required" && exit 1)
+	@test -n "$(REPO_URL)" || (echo "ERROR: REPO_URL is required" && exit 1)
+	@test -n "$(CPU_QUOTA)" || (echo "ERROR: CPU_QUOTA is required" && exit 1)
+	@test -n "$(MEMORY_QUOTA)" || (echo "ERROR: MEMORY_QUOTA is required" && exit 1)
+	@test -n "$(CONTACT_EMAIL)" || (echo "ERROR: CONTACT_EMAIL is required" && exit 1)
+	@echo "Onboarding team with parameters:"
+	@echo "  TEAM_NAME=$(TEAM_NAME)"
+	@echo "  REPO_URL=$(REPO_URL)"
+	@echo "  CPU_QUOTA=$(CPU_QUOTA)"
+	@echo "  MEMORY_QUOTA=$(MEMORY_QUOTA)"
+	@echo "  CONTACT_EMAIL=$(CONTACT_EMAIL)"
+	@echo ""
+	$(PYTHON) scripts/onboard_team.py \
+		--team $(TEAM_NAME) \
+		--repo $(REPO_URL) \
+		--cpu $(CPU_QUOTA) \
+		--memory $(MEMORY_QUOTA) \
+		--contact $(CONTACT_EMAIL)
+
+# ── Cluster Add-ons: ArgoCD ──────────────────────────────────────────────────
+
+HELM := helm
+ARGOCD_VALUES_TPL := addons/argocd-values.yaml.tpl
+ARGOCD_VALUES_RESOLVED := /tmp/argocd-values.yaml
+
+.PHONY: install-argocd
+install-argocd:  ## [shared service] Install ArgoCD to argocd namespace with IRSA role for ECR
+	@echo "Fetching OIDC issuer URL from Parameter Store..."
+	$(eval OIDC_URL := $(shell $(AWS) ssm get-parameter --name /eks/thor/oidc-issuer-url --query "Parameter.Value" --output text 2>/dev/null))
+	@test -n "$(OIDC_URL)" || (echo "ERROR: OIDC issuer URL not found at /eks/thor/oidc-issuer-url — run post-create-thor first" && exit 1)
+	$(eval OIDC_ISSUER_HOST := $(shell echo "$(OIDC_URL)" | sed 's|https://||'))
+	@echo "OIDC issuer host: $(OIDC_ISSUER_HOST)"
+	@echo ""
+	@echo "Deploying ArgoCD IRSA role..."
+	$(eval STACK_EXISTS := $(shell $(AWS) cloudformation describe-stacks --stack-name iam-argocd-ecr-role-dev --query "Stacks[0].StackName" --output text 2>/dev/null || echo ""))
+	$(eval CHANGE_SET_TYPE := $(if $(STACK_EXISTS),UPDATE,CREATE))
+	@echo "Creating $(CHANGE_SET_TYPE) change set for iam-argocd-ecr-role-dev..."
+	$(AWS) cloudformation deploy \
+		--no-execute-changeset \
+		--stack-name iam-argocd-ecr-role-dev \
+		--template-file iam/argocd-ecr-role.yaml \
+		--parameter-overrides OIDCIssuerHost=$(OIDC_ISSUER_HOST) ClusterName=thor Environment=dev \
+		--capabilities CAPABILITY_NAMED_IAM
+	@echo ""
+	@echo "IMPORTANT: Execute the CloudFormation change set for iam-argocd-ecr-role-dev in the AWS Console."
+	@read -p "Press Enter after executing the change set to continue with ArgoCD installation..."
+	@echo ""
+	@echo "Fetching ArgoCD role ARN from iam-argocd-ecr-role-dev stack..."
+	$(eval ARGOCD_ROLE_ARN := $(shell $(AWS) cloudformation describe-stacks --stack-name iam-argocd-ecr-role-dev --query "Stacks[0].Outputs[?OutputKey=='ArgoCDRoleArn'].OutputValue" --output text 2>/dev/null))
+	@test -n "$(ARGOCD_ROLE_ARN)" || (echo "ERROR: iam-argocd-ecr-role-dev stack not found or ArgoCDRoleArn output missing" && exit 1)
+	@echo "ArgoCD role ARN: $(ARGOCD_ROLE_ARN)"
+	@echo ""
+	@echo "Rendering ArgoCD Helm values..."
+	ARGOCD_ROLE_ARN="$(ARGOCD_ROLE_ARN)" envsubst < $(ARGOCD_VALUES_TPL) > $(ARGOCD_VALUES_RESOLVED)
+	@echo "Rendered values written to $(ARGOCD_VALUES_RESOLVED)"
+	@echo ""
+	@echo "Adding ArgoCD Helm repository..."
+	$(HELM) repo add argo https://argoproj.github.io/argo-helm
+	$(HELM) repo update
+	@echo ""
+	@echo "Installing ArgoCD..."
+	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+	$(HELM) upgrade --install argocd argo/argo-cd \
+		--namespace argocd \
+		--values $(ARGOCD_VALUES_RESOLVED) \
+		--wait \
+		--timeout 10m
+	@echo ""
+	@echo "ArgoCD installed successfully!"
+	@echo ""
+	@echo "Waiting for ArgoCD pods to be Ready..."
+	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=5m
+	@echo ""
+	@echo "=== ArgoCD Access Instructions ==="
+	@echo ""
+	@echo "1. Retrieve admin password:"
+	@echo "   kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d"
+	@echo ""
+	@echo "2. Port-forward to ArgoCD UI:"
+	@echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
+	@echo ""
+	@echo "3. Access UI at: https://localhost:8080"
+	@echo "   Username: admin"
+	@echo "   Password: (use command from step 1)"
+	@echo ""
+
 # ── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help

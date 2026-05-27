@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "ClusterName",
+    "ParameterValue": "thor"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "dev"
+  },
+  {
+    "ParameterKey": "OIDCIssuerHost",
+    "ParameterValue": "PLACEHOLDER_RESOLVED_BY_MAKEFILE"
+  }
+]

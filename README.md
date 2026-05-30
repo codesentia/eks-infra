@@ -81,7 +81,7 @@ make post-create-thor       # associate OIDC provider, deploy VPC CNI IRSA role,
 
 > Requires `thor` cluster deployed with OIDC provider enabled.
 
-Install ArgoCD as the shared GitOps controller:
+Install ArgoCD as the shared GitOps controller:ma
 
 ```bash
 make install-argocd

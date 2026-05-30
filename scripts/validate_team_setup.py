@@ -50,31 +50,47 @@ def print_check(passed: bool, message: str, error_details: str = ""):
 
 
 def validate_namespace(team_name: str) -> bool:
-    """Validate namespace exists and has correct labels."""
+    """Validate namespace exists and has correct labels and annotations."""
     namespace = f"team-{team_name}"
 
     if not check_resource_exists("namespace", namespace):
         print_check(False, f"Namespace {namespace} exists", "Namespace not found")
         return False
 
-    # Check labels
+    # Check labels (only team label is required)
     result = run_kubectl(
         ["get", "namespace", namespace, "-o", "jsonpath={.metadata.labels}"]
     )
 
     labels = result.stdout
-    required_labels = ["platform.io/team", "platform.io/contact", "platform.io/repo"]
-    missing_labels = [label for label in required_labels if label not in labels]
-
-    if missing_labels:
+    if "platform.io/team" not in labels:
         print_check(
             False,
-            f"Namespace {namespace} has required labels",
-            f"Missing labels: {', '.join(missing_labels)}",
+            f"Namespace {namespace} has required label",
+            "Missing label: platform.io/team",
         )
         return False
 
-    print_check(True, f"Namespace {namespace} exists with correct labels")
+    # Check annotations (contact and repo should be in annotations)
+    result = run_kubectl(
+        ["get", "namespace", namespace, "-o", "jsonpath={.metadata.annotations}"]
+    )
+
+    annotations = result.stdout
+    required_annotations = ["platform.io/contact", "platform.io/repo"]
+    missing_annotations = [
+        ann for ann in required_annotations if ann not in annotations
+    ]
+
+    if missing_annotations:
+        print_check(
+            False,
+            f"Namespace {namespace} has required annotations",
+            f"Missing annotations: {', '.join(missing_annotations)}",
+        )
+        return False
+
+    print_check(True, f"Namespace {namespace} exists with correct labels and annotations")
     return True
 
 

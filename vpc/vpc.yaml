@@ -73,6 +73,8 @@ Resources:
           Value: !Sub "eks-${Environment}"
         - Key: Environment
           Value: !Ref Environment
+        - Key: Test
+          Value: "This is a test"
 
   # ── Internet Gateway ─────────────────────────────────────────────────────
   InternetGateway:
